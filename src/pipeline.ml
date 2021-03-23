@@ -76,6 +76,9 @@ let or_die = function
 
 (* Pipeline to build the opam base image and the compiler images for a particular architecture. *)
 module Arch = struct
+  (* 2020-04-29: On Windows, squashing images is still experimental (broken). *)
+  let squash os_family = os_family <> `Windows
+
   let install_opam ~arch ~ocluster ~distro ~repos ~push_target =
     let arch_name = Ocaml_version.string_of_arch arch in
     let distro_tag = Dockerfile_distro.tag_of_distro distro in
@@ -97,7 +100,9 @@ module Arch = struct
         )
       )
     in
-    let options = { Cluster_api.Docker.Spec.defaults with squash = true; include_git = true } in
+    let options = { Cluster_api.Docker.Spec.defaults with
+                    squash = squash (Dockerfile_distro.os_family_of_distro distro);
+                    include_git = true } in
     let cache_hint = Printf.sprintf "opam-%s" distro_tag in
     Current_ocluster.Raw.build_and_push ocluster ~src:[opam_repository_master] dockerfile
       ~cache_hint
@@ -111,7 +116,7 @@ module Arch = struct
     let> base = base in
     let dockerfile = `Contents (install_compiler_df ~os_family ~arch ~switch base |> Dockerfile.string_of_t) in
     (* ([include_git] doesn't do anything here, but it saves rebuilding during the upgrade) *)
-    let options = { Cluster_api.Docker.Spec.defaults with squash = true; include_git = true } in
+    let options = { Cluster_api.Docker.Spec.defaults with squash = squash os_family; include_git = true } in
     let cache_hint = Printf.sprintf "%s-%s-%s" (Ocaml_version.to_string switch) arch_name base in
     Current_ocluster.Raw.build_and_push ocluster ~src:[] dockerfile
       ~cache_hint
@@ -123,7 +128,7 @@ module Arch = struct
     Current.component "archive" |>
     let> base = base in
     let dockerfile = `Contents (install_package_archive base |> Dockerfile.string_of_t) in
-    let options = { Cluster_api.Docker.Spec.defaults with squash = true; include_git = true } in
+    let options = { Cluster_api.Docker.Spec.defaults with squash = squash os_family; include_git = true } in
     let cache_hint = Printf.sprintf "archive-%s" base in
     Current_ocluster.Raw.build_and_push ocluster ~src:[] dockerfile
       ~cache_hint
